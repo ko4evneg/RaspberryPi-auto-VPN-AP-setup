@@ -2,6 +2,10 @@
 LBLUE='\033[0;36m'
 NC='\033[0m'
 SSID='RpiFi'
+pw="$1"
+if [ -z "$pw" ]; then
+  read -p "Enter your desired password for AP RpiFi: " pw
+fi
 
 echo "\n${LBLUE}#####   START AUTO-CONFIGURATION SCRIPT   #####${NC}"
 
@@ -29,8 +33,6 @@ INTERNET_WLAN_IF=$(sudo lshw -c network| awk '/bus info: usb/{getline; if (/logi
 AP_WLAN_IF=$(ls /sys/class/net | grep '^wlan' | grep -v "^${INTERNET_WLAN_IF}$")
 echo "${LBLUE}Detected USB interface ${INTERNET_WLAN_IF}. Assuming it is internet gateway. Configuring ${AP_WLAN_IF} as access point...${NC}"
 
-read -p "Enter your desired password for AP RpiFi: " pw
-
 sudo raspi-config nonint do_wifi_country RU
 sudo apt-get install dnsmasq hostapd -y
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y netfilter-persistent iptables-persistent
@@ -49,10 +51,15 @@ sudo sed -i -e '$a\' -e "interface=${AP_WLAN_IF}\nssid=${SSID}\nhw_mode=g\nchann
 sudo systemctl unmask hostapd.service
 sudo systemctl enable hostapd.service
 sudo sed -i '/^ExecStart=/i ExecStartPre=/sbin/ifconfig wlan0 172.16.1.1 netmask 255.255.255.0 up' /lib/systemd/system/hostapd.service
-sudo systemctl restart dnsmasq.service hostapd.service
+sudo sed -i -e '/^After=/d' -e '/\[Unit\]/a After=network-online.target' /lib/systemd/system/hostapd.service
+sudo systemctl stop dnsmasq.service hostapd.service
 echo "${LBLUE}Access point successfully configured on ${AP_WLAN_IF}. AP IP: 172.16.1.1/24${NC}"
 
 echo "${LBLUE}Installing v2ray VPN...${NC}"
 sudo apt install snapd -y
 sudo snap install v2raya
+sudo systemctl start dnsmasq.service hostapd.service
 echo "${LBLUE}V2ray VPN successfully installed. Web-interface available on port 2017.${NC}"
+
+#TODO add port-forward for public IP
+#TODO add auto-start (possibly tunnel)
